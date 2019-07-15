@@ -1,4 +1,4 @@
-function[x,fval,exitflag,in,out,op_size,needenergy,a1,b1]=QP_test(B_data,plug_in,ori_soc, EV_num,EV_cap, bound, Tariff,fsoc,power)
+function[x,fval,exitflag,in,out,op_size,needenergy,a1,b1]=QP_test(B_data,plug_in,ori_soc, EV_num,EV_cap, bound, Tariff,fsoc,power,w_t)
 in=plug_in(:,1);
 out=plug_in(:,2);
 
@@ -64,10 +64,15 @@ for EV=1:size(op_size,1)
     end
     f1(1+96*(EV-1):96*EV,1) = f_1.*B_data;
     f2(1+96*(EV-1):96*EV,1) = f_1.*Tariff';
+    f_1=zeros(96,1);
 end
-
+reshape(f1,[96,length(op_size)]);
 %% set H & f
+% f1=f1/max(B_data);
+% f2=f2/max(Tariff);
+
 H=H_1;
+% f=f1+f2*w_t;
 f=f1;
 
 %% define A, inequality const
@@ -120,7 +125,8 @@ for i=1:96
     sum(sum(a_2));
     if ans>0
         a_2=reshape(a_2',[96*length(op_size),1])';
-        b_2=B_data(i)-min(B_data);
+        %         b_2=B_data(i)-min(B_data);
+        b_2=B_data(i);
         b_3=bound-B_data(i);
         exist a2;
         if ans==0
@@ -154,21 +160,93 @@ a3=a2*(-1);
 A=[A; a3];
 B=[B; b3];
 
-%% P boundary
-b_default=zeros(96*size(op_size,1),1);
-for EV=1:EV_num
-    idx=find(plug_in(EV,1)==op_size(:,1));
-    b_default(96*(idx-1)+plug_in(EV,1):96*(idx-1)+plug_in(EV,2)-1) = b_default(96*(idx-1)+plug_in(EV,1):96*(idx-1)+plug_in(EV,2)-1)+1;
+% a4:soc const(up) & a5:soc const(lower)
+
+a_4 = zeros(size(op_size(:,1),1),96);
+for EV=1:size(op_size(:,1),1)
+    idx=find(plug_in(EV)==op_size(:,1));
+    a_4(idx, plug_in(EV,1) : plug_in(EV,2)-1)=1;
+    b_4=EV_cap-ori_soc(EV);
+    a_4=reshape(a_4',[96*length(op_size),1])';
+    b_5=ori_soc(EV);
+    exist a4;
+    if ans==0
+        a4=a_4;
+    else
+        a4=[a4; a_4];
+    end
+    if ans==0
+        b4=b_4;
+    else
+        b4=[b4; b_4];
+    end
+        if ans==0
+        b5=b_5;
+    else
+        b5=[b5; b_5];
+    end
+    a_4 = zeros(size(op_size(:,1),1),96);
 end
+a5=a4*(-1);
+
+A=[A; a4; a5];
+B=[B; b4; b5];
+
+%% P boundary
+bound_mat=zeros(length(op_size),96);
+for row=1:EV_num
+    for col=1:96
+        if (col>=plug_in(row,1))&(col<plug_in(row,2))
+            idx=find(plug_in(row,1)==op_size(:,1));
+            bound_mat(idx,col)=bound_mat(idx,col)+1;
+        end
+    end
+end
+ bound_mat=reshape(bound_mat',[96*size(bound_mat,1),1]);
+%%
+
 
 % set charge/discharge value
-ub=b_default*power(1);
-lb=b_default*power(2);
+ub=bound_mat*power(1);
+lb=bound_mat*power(2);
 
 %% 다음과 같이 표시 없이 'interior-point-convex' 알고리즘을 사용하도록 옵션을 설정합니다.
-options = optimoptions('quadprog','algorithm','interior-point-convex','Display','final-detailed','MaxIterations',200,'display','off');
+options = optimoptions('quadprog','algorithm','interior-point-convex','Display','final-detailed','MaxIterations',300)%'Display','off');
 %     options = optimoptions('quadprog','algorithm','interior-point-convex','Display','final-detailed','MaxIterations',200);
 %% quadprog를 호출합니다.
 %     [x,fval,exitflag] = quadprog(H,f,A,B,Aeq,Beq,lb,ub,[],options);
 [x,fval,exitflag] = quadprog(H,f,A,B,a1,b1,lb,ub,[],options);
+%required check
+rr=reshape(x,[96,length(op_size)])';
+for row=1:96
+    for col=1:96
+        if needenergy(row,col)~=0
+            idx=find(row==op_size(:,1));
+            exist c_a;
+            if ans==0
+                c_a=sum(rr(idx,row:row+col-1));
+            else
+                c_a=[c_a sum(rr(idx,row:row+col-1))];
+            end
+            exist c_b;
+            if ans==0
+                c_b=needenergy(row,col);
+            else
+                c_b=[c_b needenergy(row,col)];
+            end
+        end
+    end
 end
+%result
+c_r=round([c_a' c_b'],2);
+c_r(:,1)>=c_r(:,2);
+find(0==ans)
+figure(1)
+plot(c_r)
+xlabel("EV number");
+ylabel("Required Energy for each EV");
+title("Check if the optimization result satisfy the required energy as planned")
+legend("Result of optimization","Required energy");
+
+end
+
