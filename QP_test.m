@@ -2,7 +2,7 @@ function[x,fval,exitflag,in,out,op_size,needenergy,a1,b1]=QP_test(B_data,plug_in
 in=plug_in(:,1);
 out=plug_in(:,2);
 
-%% µ¥ÀÌÅÍ ÀüÃ³¸®
+%% ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã³ï¿½ï¿½
 for i=1:96
     if sum(find(i==plug_in(:,1))) >= 1
         exist op_size;
@@ -32,7 +32,7 @@ for i=1:size(op_size,1)
     clear temp
 end
 
-%% P^2, Â÷ ÇÑ´ë¸¸. => plug in, out Ã¼Å©ÇØ¼­ Âß ³ÖÀ¸¸é µÉµí.
+%% P^2, ï¿½ï¿½ ï¿½Ñ´ë¸¸. => plug in, out Ã¼Å©ï¿½Ø¼ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Éµï¿½.
 H_1=zeros(96*size(op_size,1),96*size(op_size,1));
 for EV=1:size(op_size,1)
     exist P2;
@@ -210,10 +210,10 @@ end
 ub=bound_mat*power(1);
 lb=bound_mat*power(2);
 
-%% ´ÙÀ½°ú °°ÀÌ Ç¥½Ã ¾øÀÌ 'interior-point-convex' ¾Ë°í¸®ÁòÀ» »ç¿ëÇÏµµ·Ï ¿É¼ÇÀ» ¼³Á¤ÇÕ´Ï´Ù.
+%% ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ç¥ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ 'interior-point-convex' ï¿½Ë°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ïµï¿½ï¿½ï¿½ ï¿½É¼ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Õ´Ï´ï¿½.
 options = optimoptions('quadprog','algorithm','interior-point-convex','Display','final-detailed','MaxIterations',300)%'Display','off');
 %     options = optimoptions('quadprog','algorithm','interior-point-convex','Display','final-detailed','MaxIterations',200);
-%% quadprog¸¦ È£ÃâÇÕ´Ï´Ù.
+%% quadprogï¿½ï¿½ È£ï¿½ï¿½ï¿½Õ´Ï´ï¿½.
 %     [x,fval,exitflag] = quadprog(H,f,A,B,Aeq,Beq,lb,ub,[],options);
 [x,fval,exitflag] = quadprog(H,f,A,B,a1,b1,lb,ub,[],options);
 %required check
@@ -243,5 +243,10 @@ c_r(:,1)>=c_r(:,2);
 find(0==ans)
 figure(1)
 plot(c_r)
+xlabel("EV number");
+ylabel("Required Energy for each EV");
+title("Check if the optimization result satisfy the required energy as planned")
+legend("Result of optimization","Required energy");
+
 end
 
