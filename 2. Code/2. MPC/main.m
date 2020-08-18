@@ -1,47 +1,73 @@
-% n = 2; % the number of state variables (SOC on each EV = the number of EV(charger))
-% m = 2; % the number of input variables (power for each EV charging = the number of EV)
-% Hp = 3; % prediction horizon
-% Hc = 2; % control horizon
-% k = 3;  % current time step 
-% 
-clear all; clc; close all;
-%% Deifne system structure
-A = [1 1; 1 1]; % size = n*n
-B = [1 1; 1 1]; % size = n*m
-C = [1 1; 1 1]; % C = I 
-D = [0];
-sys = ss(A, B, C, D);  % IDsys = idss(A, B, C, D);
+yalmip('clear')
+clear all
 
-%% Specify the system Input/output
-sys.InputName = {'PowerForEV1', 'PowerForEV2'};
-sys.OutputName = {'SoCEV1', 'SoCEV2'};
-sys.StateName = {'SoCEV1', 'SoCEV2'};
-% The number of variables
-sys.InputGroup.MV = 2;  % Manipulated Variables; 1 [power] 
-% sys.InputGroup.UD = 0;  % Unmeasured disturbances;
-sys.OutputGroup.MO = 2; % Measured outputs
-% sys.OutputGroup.UO = 0; % Unmeasured outputs
+% ----------------------------------------------------
+% Status x(t): SoC [kwh] at time instance t
+% Inputs u(t): Charging power [kw] at time instance t
+% -----------------------------------------------------
 
-% Suppress Command Window messages from the MPC controller.
-old_status = mpcverbosity('off');
+% Model data
+A = eye(2);
+B = eye(2);
+nx = 2; % Number of states
+nu = 2; % Number of inputs
 
-% Create Model Predictive Controller
-Ts = 1; % control interval
-MPCobj = mpc(sys,Ts);
-get(MPCobj)
+% MPC data
+Q = 1; % coefficient for current state
+R = 1;  % coefficient for current input
+N = 7;  % control holizontal steps
 
-% Adjust horizon
-MPCobj.PredictionHorizon = 15;
-% Adjust Units
-MPCobj.Model.Plant.OutputUnit = {'[kwh]','[kwh]'};
+% Set state variables
+x = zeros(nx, 1); % initialize as all "0"
+% Set input variables to be optimized for control hilontal steps  
+u = sdpvar(repmat(nu,1,N),repmat(1,1,N));
 
-% constraints for manipulated values
-MPCobj.MV.Min = [1; 1];  % power 
-MPCobj.MV.Max = [2; 2]; % power
-MPCobj.MV.RateMin = [0.1; 0.1]; %
-MPCobj.MV.RateMax = [1; 1];
+% Initialization
+constraints = []; 
+objective = 0;  
+% Constraints
+xMax = 5;   % upper boundary for States
+xMin = 0;   % lower boudanry for States
+uMax = 1;   % upper boundary for Inputs
+uMin = 0;   % lower boundary for Inputs
 
-% Perform Simulation
-T = 26;
-r = [0 ; 100];
-sim(MPCobj,T,r)
+% Calculate Cost
+for k = 1:N
+     x = A*x + B*u{k};
+    objective = objective + norm(Q*x,1) + norm(R*u{k},1);
+    constraints = [constraints, uMin <= u{k}<= uMax, xMin<=x<=xMax];
+end
+
+% Get feasible solution
+optimize(constraints,-objective);
+
+%% Display the graph
+% Calculate the state x(t) with optimized inputs u(t)
+state = zeros(nx,N);
+for k = 1:N
+     state(:, k+1) = A*state(:, k) + B*value(u{k});
+     input(:, k) = value(u{k});
+end
+% Describe
+scaleXx = 0:N;
+scaleXu = 0.5:1:N;
+plot(scaleXx, state(1,:), 'b-o', ...  % States for EV1
+       scaleXu, input(1,:), 'k-x', ...    % Inputs for EV1
+       scaleXx, state(2,:), 'b-o', ...  % States for EV2
+       scaleXu, input(2,:), 'b-x', ...    % Inputs for EV2
+       scaleXx, uMax*ones(1, size(scaleXx,2)), 'k:', ...  % Upper boudanry of Inputs (power)
+       scaleXx, xMax*ones(1, size(scaleXx,2)), 'b:', ...    % Upper boudanry of States (Soc)
+       scaleXx, uMin*ones(1, size(scaleXx,2)), 'k:');  % Lower boudanry of Inputs (power)
+title('Charging schedule');
+xlabel('Time horizon [hour]');
+ylabel('Soc [kwh]');
+legend('EV1 SoC [kwh]', ...
+           'EV1 charging [kw]', ...
+           'EV2 SoC [kwh]', ...
+           'EV2 charging [kw]', ...
+           'Power limit [kw]', ...
+           'Soc limit [kwh]');
+axis([0 N+1 xMin-0.5 xMax+0.5]);
+
+
+
