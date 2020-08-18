@@ -4,11 +4,14 @@ clear all
 % ----------------------------------------------------
 % Status x(t): SoC [kwh] at time instance t
 % Inputs u(t): Charging power [kw] at time instance t
+% State space model
+% x(t+1) = Ax(t) + Bu(t)
 % -----------------------------------------------------
 
 % Model data
 A = eye(2);
 B = eye(2);
+C = eye(2);
 nx = 2; % Number of states
 nu = 2; % Number of inputs
 
@@ -21,6 +24,8 @@ N = 7;  % control holizontal steps
 x = zeros(nx, 1); % initialize as all "0"
 % Set input variables to be optimized for control hilontal steps  
 u = sdpvar(repmat(nu,1,N),repmat(1,1,N));
+% Set disturbance
+v = random('Normal', 0, 0.05, [nx, N]);
 
 % Initialization
 constraints = []; 
@@ -33,13 +38,14 @@ uMin = 0;   % lower boundary for Inputs
 
 % Calculate Cost
 for k = 1:N
-     x = A*x + B*u{k};
+     x = A*x + B*u{k} + C*v(:,k);
     objective = objective + norm(Q*x,1) + norm(R*u{k},1);
     constraints = [constraints, uMin <= u{k}<= uMax, xMin<=x<=xMax];
 end
 
 % Get feasible solution
-optimize(constraints,-objective);
+ops = []; % sdpsettings('solver','linprog');
+optimize(constraints,-objective, ops);
 
 %% Display the graph
 % Calculate the state x(t) with optimized inputs u(t)
@@ -51,12 +57,12 @@ end
 % Describe
 scaleXx = 0:N;
 scaleXu = 0.5:1:N;
-plot(scaleXx, state(1,:), 'b-o', ...  % States for EV1
-       scaleXu, input(1,:), 'k-x', ...    % Inputs for EV1
-       scaleXx, state(2,:), 'b-o', ...  % States for EV2
-       scaleXu, input(2,:), 'b-x', ...    % Inputs for EV2
+plot(scaleXx, state(1,:), 'r-o', ...  % States for EV1
+       scaleXu, input(1,:), 'r-x', ...    % Inputs for EV1
+       scaleXx, state(2,:), 'g-o', ...  % States for EV2
+       scaleXu, input(2,:), 'g-x', ...    % Inputs for EV2
        scaleXx, uMax*ones(1, size(scaleXx,2)), 'k:', ...  % Upper boudanry of Inputs (power)
-       scaleXx, xMax*ones(1, size(scaleXx,2)), 'b:', ...    % Upper boudanry of States (Soc)
+       scaleXx, xMax*ones(1, size(scaleXx,2)), 'k:', ...    % Upper boudanry of States (Soc)
        scaleXx, uMin*ones(1, size(scaleXx,2)), 'k:');  % Lower boudanry of Inputs (power)
 title('Charging schedule');
 xlabel('Time horizon [hour]');
